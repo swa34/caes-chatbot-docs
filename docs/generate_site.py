@@ -895,8 +895,27 @@ def generate_html(sites):
 
         // Search functionality
         document.getElementById('searchInput').addEventListener('input', function(e) {
-            const searchTerm = e.target.value.toLowerCase();
+            const searchTerm = e.target.value.toLowerCase().trim();
             const pageItems = document.querySelectorAll('.page-item');
+            const siteSections = document.querySelectorAll('.site-section');
+            const subsections = document.querySelectorAll('.subsection-content');
+
+            // If search is empty, show all items and collapse sections
+            if (searchTerm.length === 0) {
+                pageItems.forEach(item => item.style.display = 'block');
+                siteSections.forEach(section => {
+                    const content = section.querySelector('.site-content');
+                    const icon = section.querySelector('.toggle-icon');
+                    content.classList.remove('expanded');
+                    icon.classList.remove('expanded');
+                });
+                subsections.forEach(sub => sub.classList.remove('expanded'));
+                return;
+            }
+
+            let matchCount = 0;
+            const sectionsWithMatches = new Set();
+            const subsectionsWithMatches = new Set();
 
             pageItems.forEach(item => {
                 const title = item.querySelector('.page-title').textContent.toLowerCase();
@@ -904,15 +923,52 @@ def generate_html(sites):
 
                 if (title.includes(searchTerm) || url.includes(searchTerm)) {
                     item.style.display = 'block';
-                    // Expand parent site if match found
+                    matchCount++;
+
+                    // Track parent sections and subsections that have matches
                     const site = item.closest('.site-section');
-                    const content = site.querySelector('.site-content');
-                    if (searchTerm.length > 2) {
-                        content.classList.add('expanded');
-                        site.querySelector('.toggle-icon').classList.add('expanded');
-                    }
+                    if (site) sectionsWithMatches.add(site);
+
+                    const subsection = item.closest('.subsection-content');
+                    if (subsection) subsectionsWithMatches.add(subsection);
                 } else {
                     item.style.display = 'none';
+                }
+            });
+
+            // Expand sections with matches, collapse others
+            siteSections.forEach(section => {
+                const content = section.querySelector('.site-content');
+                const icon = section.querySelector('.toggle-icon');
+
+                if (sectionsWithMatches.has(section)) {
+                    content.classList.add('expanded');
+                    icon.classList.add('expanded');
+                } else {
+                    content.classList.remove('expanded');
+                    icon.classList.remove('expanded');
+                }
+            });
+
+            // Expand subsections with matches
+            subsectionsWithMatches.forEach(subsection => {
+                subsection.classList.add('expanded');
+                const header = subsection.previousElementSibling;
+                if (header && header.classList.contains('subsection-header')) {
+                    const arrow = header.querySelector('span');
+                    if (arrow) arrow.textContent = '▼';
+                }
+            });
+
+            // Collapse subsections without matches
+            subsections.forEach(subsection => {
+                if (!subsectionsWithMatches.has(subsection)) {
+                    subsection.classList.remove('expanded');
+                    const header = subsection.previousElementSibling;
+                    if (header && header.classList.contains('subsection-header')) {
+                        const arrow = header.querySelector('span');
+                        if (arrow) arrow.textContent = '▶';
+                    }
                 }
             });
         });
