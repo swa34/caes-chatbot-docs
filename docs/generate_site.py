@@ -599,6 +599,7 @@ def generate_html(sites):
 
         <div class="search-box">
             <input type="text" id="searchInput" placeholder="Search pages by title or URL...">
+            <div id="searchResults" style="margin-top: 0.5rem; font-size: 0.9rem; color: #666;"></div>
         </div>
 
         <button class="expand-all" onclick="toggleAll()">Expand All Sites</button>
@@ -899,6 +900,7 @@ def generate_html(sites):
             const pageItems = document.querySelectorAll('.page-item');
             const siteSections = document.querySelectorAll('.site-section');
             const subsections = document.querySelectorAll('.subsection-content');
+            const searchResults = document.getElementById('searchResults');
 
             // If search is empty, show all items and collapse sections
             if (searchTerm.length === 0) {
@@ -910,10 +912,12 @@ def generate_html(sites):
                     icon.classList.remove('expanded');
                 });
                 subsections.forEach(sub => sub.classList.remove('expanded'));
+                searchResults.textContent = '';
                 return;
             }
 
             let matchCount = 0;
+            let firstMatch = null;
             const sectionsWithMatches = new Set();
             const subsectionsWithMatches = new Set();
 
@@ -925,6 +929,9 @@ def generate_html(sites):
                     item.style.display = 'block';
                     matchCount++;
 
+                    // Track first match for scrolling
+                    if (!firstMatch) firstMatch = item;
+
                     // Track parent sections and subsections that have matches
                     const site = item.closest('.site-section');
                     if (site) sectionsWithMatches.add(site);
@@ -935,6 +942,15 @@ def generate_html(sites):
                     item.style.display = 'none';
                 }
             });
+
+            // Update search results counter
+            if (matchCount === 0) {
+                searchResults.textContent = 'No results found';
+                searchResults.style.color = '#d32f2f';
+            } else {
+                searchResults.textContent = `Found ${matchCount} result${matchCount !== 1 ? 's' : ''}`;
+                searchResults.style.color = '#2e7d32';
+            }
 
             // Expand sections with matches, collapse others
             siteSections.forEach(section => {
@@ -971,6 +987,13 @@ def generate_html(sites):
                     }
                 }
             });
+
+            // Scroll to first match after a short delay to allow expansion animations
+            if (firstMatch) {
+                setTimeout(() => {
+                    firstMatch.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 100);
+            }
         });
     </script>
 </body>
