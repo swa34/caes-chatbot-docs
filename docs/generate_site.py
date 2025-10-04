@@ -816,6 +816,22 @@ def generate_html(sites):
                     </div>
                 </div>
 """
+        elif site_name == "ets":
+            # ETS files are from Dropbox - render as flat list
+            html += '<ul class="page-list">\n'
+            for page in sorted(site_data["pages"], key=lambda x: x.get("Title", "")):
+                title = page.get("Title", "Untitled")
+                url = page.get("URL", "#")
+                local_file = page.get("Local File", "")
+
+                html += f"""
+                    <li class="page-item">
+                        <div class="page-title">{title}</div>
+                        <a href="{url}" class="page-url" target="_blank">{url}</a>
+                        <div class="page-meta">Source: Dropbox (ETS Resources)</div>
+                    </li>
+"""
+            html += "</ul>\n"
         else:
             # Hierarchical display for websites
             hierarchy = build_hierarchy(site_data["pages"])
