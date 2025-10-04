@@ -18,6 +18,14 @@ DOCS_BASE = Path(__file__).parent.parent / "docs"
 OUTPUT_DIR = Path(__file__).parent
 
 
+def normalize_url(url):
+    """Normalize URLs to use production servers instead of dev servers"""
+    if not url or not isinstance(url, str):
+        return url
+    # Replace dev SSL server with production secure server
+    return url.replace("https://devssl.caes.uga.edu", "https://secure.caes.uga.edu")
+
+
 def read_crawl_data():
     """Read all crawl inventory and summary files, including subdirectories"""
     sites = {}
@@ -45,11 +53,14 @@ def read_crawl_data():
                     reader = csv.DictReader(f)
                     rows = list(reader)
                     for row in rows:
+                        # Normalize URLs
+                        if "URL" in row:
+                            row["URL"] = normalize_url(row["URL"])
                         crawl_data["pages"].append(row)
 
                     # Extract base URL from first row
                     if rows and not crawl_data["summary"].get("base_url"):
-                        first_url = rows[0].get("URL", "")
+                        first_url = normalize_url(rows[0].get("URL", ""))
                         if first_url:
                             from urllib.parse import urlparse
 
@@ -69,10 +80,10 @@ def read_crawl_data():
                 with open(metadata_file, "r", encoding="utf-8") as f:
                     metadata = json.load(f)
                     # Store base URL in summary (always, regardless of whether pages exist)
-                    base_url = metadata.get("baseUrl")
+                    base_url = normalize_url(metadata.get("baseUrl"))
                     # If baseUrl is None, try to extract from first page URL
                     if not base_url and metadata.get("files"):
-                        first_url = metadata["files"][0].get("url", "")
+                        first_url = normalize_url(metadata["files"][0].get("url", ""))
                         if first_url:
                             from urllib.parse import urlparse
 
@@ -92,7 +103,7 @@ def read_crawl_data():
                         for file_info in metadata.get("files", []):
                             crawl_data["pages"].append(
                                 {
-                                    "URL": file_info.get("url", ""),
+                                    "URL": normalize_url(file_info.get("url", "")),
                                     "Title": file_info.get("title", "Untitled"),
                                     "Local File": f"docs/{site_name}/{file_info['filename']}",
                                     "Source": "metadata",
@@ -238,7 +249,7 @@ def read_crawl_data():
 
                         crawl_data["pages"].append(
                             {
-                                "URL": url,
+                                "URL": normalize_url(url),
                                 "Title": title,
                                 "Local File": str(md_file),
                                 "Source": "direct",
