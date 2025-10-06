@@ -825,18 +825,14 @@ def generate_html(sites):
             page_count = sum(
                 len(child_data["pages"]) for _, child_data in teamdynamix_children
             )
-            # Extract base URL from first article URL in summary
-            base_url = "N/A"
-            if "categories" in site_data["summary"]:
-                for category_data in site_data["summary"]["categories"].values():
-                    if category_data.get("articles"):
-                        first_url = category_data["articles"][0].get("url", "")
-                        if first_url:
-                            from urllib.parse import urlparse
+            # Extract base URL and crawl date
+            base_url = "https://uga.teamdynamix.com"
 
-                            parsed = urlparse(first_url)
-                            base_url = f"{parsed.scheme}://{parsed.netloc}"
-                            break
+            # Get crawl date from summary
+            if site_data["summary"].get("structure") == "folders":
+                crawl_date = site_data["summary"].get("crawled", "Unknown")
+            else:
+                crawl_date = site_data.get("crawl_date", "Unknown")
         # For GA Counts parent, calculate total from all children
         elif site_name == "gacounts":
             page_count = sum(
