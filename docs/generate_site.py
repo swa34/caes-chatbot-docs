@@ -122,16 +122,28 @@ def read_crawl_data():
 
                         # If no CSV, build pages list from summary files
                         if not crawl_data["pages"] and "files" in summary:
-                            for file_path in summary.get("files", []):
-                                file_name = Path(file_path).name
-                                # Infer URL from filename
-                                url = f"{summary.get('base_url', '')}/{file_name.replace('.md', '')}"
+                            for file_entry in summary.get("files", []):
+                                # Handle both old format (string) and new format (dict)
+                                if isinstance(file_entry, dict):
+                                    # New format with url, filename, filepath, etc.
+                                    url = file_entry.get("url", "")
+                                    title = file_entry.get("title", "Untitled")
+                                    file_path = file_entry.get("filepath", "")
+                                else:
+                                    # Old format (just a string path)
+                                    file_path = file_entry
+                                    file_name = Path(file_path).name
+                                    url = f"{summary.get('base_url', '')}/{file_name.replace('.md', '')}"
+                                    title = (
+                                        file_name.replace(".md", "")
+                                        .replace("-", " ")
+                                        .title()
+                                    )
+
                                 crawl_data["pages"].append(
                                     {
                                         "URL": url,
-                                        "Title": file_name.replace(".md", "")
-                                        .replace("-", " ")
-                                        .title(),
+                                        "Title": title,
                                         "Local File": file_path,
                                         "Source": "file",
                                         "Depth": "0",
@@ -177,8 +189,62 @@ def read_crawl_data():
                 if parent_summary_file.exists():
                     with open(parent_summary_file, "r", encoding="utf-8") as f:
                         parent_summary = json.load(f)
-                        # Check if this subdirectory is in the categories
+
+                        # New structure with groups
                         if (
+                            parent_summary.get("structure") == "folders"
+                            and "groups" in parent_summary
+                        ):
+                            # Find this folder in the groups
+                            group_data = parent_summary["groups"].get(item.name)
+                            if group_data:
+                                crawl_data["crawl_date"] = parent_summary.get("crawled")
+                                crawl_data["summary"][
+                                    "base_url"
+                                ] = "https://uga.teamdynamix.com"
+
+                                # Process each category in this group
+                                for category_key, category_info in group_data.get(
+                                    "categories", {}
+                                ).items():
+                                    # Read the markdown file for this category
+                                    category_file = (
+                                        item / Path(category_info["file"]).name
+                                    )
+                                    if category_file.exists():
+                                        try:
+                                            content = category_file.read_text(
+                                                encoding="utf-8"
+                                            )
+                                            import re
+
+                                            # Extract all article links from the markdown content
+                                            article_pattern = r"###\s+(.+?)\n\n\*\*Link:\*\*\s+(https?://[^\s]+)"
+                                            articles = re.findall(
+                                                article_pattern, content
+                                            )
+
+                                            # Add each article as a separate page
+                                            for article_title, article_url in articles:
+                                                crawl_data["pages"].append(
+                                                    {
+                                                        "URL": article_url.strip(),
+                                                        "Title": article_title.strip(),
+                                                        "Local File": str(
+                                                            category_file
+                                                        ),
+                                                        "Source": "teamdynamix",
+                                                        "Category": category_info.get(
+                                                            "name", ""
+                                                        ),
+                                                        "Depth": "0",
+                                                    }
+                                                )
+                                        except Exception as e:
+                                            pass
+
+                        # Old structure - check if this subdirectory is in the categories
+                        elif (
                             "categories" in parent_summary
                             and item.name in parent_summary["categories"]
                         ):
@@ -209,6 +275,48 @@ def read_crawl_data():
                         try:
                             content = md_file.read_text(encoding="utf-8")
                             import re
+
+                            # Check if this is a TeamDynamix category file
+                            is_teamdynamix = re.search(
+                                r"^source:\s+TeamDynamix Knowledge Base",
+                                content,
+                                re.MULTILINE,
+                            )
+
+                            if is_teamdynamix:
+                                # Extract category info from frontmatter
+                                category_title_match = re.search(
+                                    r"^title:\s+(.+)$", content, re.MULTILINE
+                                )
+                                category_title = (
+                                    category_title_match.group(1).strip()
+                                    if category_title_match
+                                    else title
+                                )
+
+                                # Extract all article links from the markdown content
+                                # Pattern: ### Article Title followed by **Link:** URL
+                                article_pattern = (
+                                    r"###\s+(.+?)\n\n\*\*Link:\*\*\s+(https?://[^\s]+)"
+                                )
+                                articles = re.findall(article_pattern, content)
+
+                                # Add each article as a separate page
+                                for article_title, article_url in articles:
+                                    crawl_data["pages"].append(
+                                        {
+                                            "URL": normalize_url(article_url.strip()),
+                                            "Title": article_title.strip(),
+                                            "Local File": str(md_file),
+                                            "Source": "teamdynamix",
+                                            "Category": category_title,
+                                            "Depth": "0",
+                                        }
+                                    )
+
+                                # Skip adding the category file itself if we found articles
+                                if articles:
+                                    continue
 
                             # Try frontmatter first (YAML-style: url: https://...)
                             frontmatter_match = re.search(
@@ -309,17 +417,33 @@ def format_site_name(name):
         "olod-site": "Office of Learning & Organizational Development (OLOD)",
         "omc-site": "Office of Marketing & Communications (OMC)",
         "brand-site": "CAES Brand Guidelines",
+        "research-farm-site": "Research Farm Site",
         "teamdynamix": "TeamDynamix Knowledge Base",
         "teamdynamix/absences_timecards": "TeamDynamix - Absences & Timecards",
         "teamdynamix/benefits": "TeamDynamix - Benefits",
         "teamdynamix/payroll_compensation": "TeamDynamix - Payroll & Compensation",
         "teamdynamix/travel_reimbursements": "TeamDynamix - Travel & Reimbursements",
+        "teamdynamix/accounting_gl": "TeamDynamix - Accounting & General Ledger",
+        "teamdynamix/budgets_planning": "TeamDynamix - Budgets & Planning",
+        "teamdynamix/accounts_receivable": "TeamDynamix - Accounts Receivable & Billing",
+        "teamdynamix/accounts_payable": "TeamDynamix - Accounts Payable",
+        "teamdynamix/purchasing": "TeamDynamix - Purchasing & UGAmart",
+        "teamdynamix/grants_projects": "TeamDynamix - Grants & Sponsored Projects",
+        "teamdynamix/hr_hiring": "TeamDynamix - HR & Position Management",
+        "teamdynamix/financial_system": "TeamDynamix - Financial Management System",
+        "teamdynamix/treasury_deposits": "TeamDynamix - Treasury & Deposits",
+        "teamdynamix/foundation_accounts": "TeamDynamix - Foundation Accounts",
+        "teamdynamix/animal_operations": "TeamDynamix - Animal Operations",
+        "teamdynamix/reports_analytics": "TeamDynamix - Reporting & Analytics",
+        "teamdynamix/other": "TeamDynamix - Other Topics",
         "gacounts": "Georgia Counts",  # Parent section
         "gacounts-site": "Help System & Application Pages",
         "dropbox": "Training Documents & Resources",
         "dropbox/intranet-files": "Dropbox - Intranet Files",
         "web": "Web Resources",
-        "ets": "ETS Resources",
+        "ets": "Extension Training System (ETS)",  # Parent section
+        "ets-site": "Application Pages & Help",
+        "ets-dropbox": "Training Documents",
         "wordpress-uploads-processed": "WordPress Uploads",
         "wordpress-uploads-processed/downloads": "WordPress - Downloads",
     }
@@ -624,6 +748,8 @@ def generate_html(sites):
     teamdynamix_children = []
     # Separate GA Counts sections
     gacounts_children = []
+    # Separate ETS sections
+    ets_children = []
     other_sites = []
 
     for site_name, site_data in sorted(sites.items()):
@@ -634,6 +760,12 @@ def generate_html(sites):
         elif site_name in ["gacounts-site", "dropbox"]:
             # These will be children of GA Counts parent
             gacounts_children.append((site_name, site_data))
+        elif site_name == "ets":
+            # Dropbox ETS folder - rename to ets-dropbox for cleaner display
+            ets_children.append(("ets-dropbox", site_data))
+        elif site_name == "ets-site":
+            # ETS crawler site
+            ets_children.append((site_name, site_data))
         else:
             other_sites.append((site_name, site_data))
 
@@ -665,6 +797,27 @@ def generate_html(sites):
         }
         all_sites_to_render.insert(0, ("gacounts", gacounts_parent_data))
 
+    # Add ETS parent if we have children
+    if ets_children:
+        # Extract base URL and crawl date from children
+        base_url = "N/A"
+        crawl_date = "Unknown"
+
+        # Try to get from ets-site first, then ets-dropbox
+        for child_name, child_data in ets_children:
+            if child_name == "ets-site":
+                base_url = child_data["summary"].get("base_url", base_url)
+                crawl_date = child_data.get("crawl_date", crawl_date)
+                break
+
+        # Create a synthetic parent for ETS
+        ets_parent_data = {
+            "pages": [],
+            "summary": {"base_url": base_url},
+            "crawl_date": crawl_date,
+        }
+        all_sites_to_render.insert(0, ("ets", ets_parent_data))
+
     for site_name, site_data in all_sites_to_render:
         display_name = format_site_name(site_name)
         # For TeamDynamix parent, calculate total from all children and extract base URL
@@ -689,6 +842,10 @@ def generate_html(sites):
             page_count = sum(
                 len(child_data["pages"]) for _, child_data in gacounts_children
             )
+            base_url = site_data["summary"].get("base_url", "N/A")
+        # For ETS parent, calculate total from all children
+        elif site_name == "ets":
+            page_count = sum(len(child_data["pages"]) for _, child_data in ets_children)
             base_url = site_data["summary"].get("base_url", "N/A")
         else:
             page_count = len(site_data["pages"])
@@ -756,6 +913,41 @@ def generate_html(sites):
         # If this is gacounts parent, render children as subsections
         elif site_name == "gacounts":
             for child_name, child_data in gacounts_children:
+                child_display_name = format_site_name(child_name)
+                child_page_count = len(child_data["pages"])
+
+                html += f"""
+                <div class="subsection">
+                    <div class="subsection-header" onclick="toggleSubsection('content-{child_name}')">
+                        <span>▶</span> {child_display_name} <span class="badge">{child_page_count} pages</span>
+                    </div>
+                    <div class="subsection-content" id="content-{child_name}">
+"""
+                # Render child pages as flat list
+                html += '<ul class="page-list">\n'
+                for page in sorted(
+                    child_data["pages"], key=lambda x: x.get("Title", "")
+                ):
+                    title = page.get("Title", "Untitled")
+                    url = page.get("URL", "#")
+                    local_file = page.get("Local File", "")
+
+                    html += f"""
+                    <li class="page-item">
+                        <div class="page-title">{title}</div>
+                        <a href="{url}" class="page-url" target="_blank">{url}</a>
+                        <div class="page-meta">Local: {Path(local_file).name if local_file else 'N/A'}</div>
+                    </li>
+"""
+                html += "</ul>\n"
+
+                html += """
+                    </div>
+                </div>
+"""
+        # If this is ETS parent, render children as subsections
+        elif site_name == "ets":
+            for child_name, child_data in ets_children:
                 child_display_name = format_site_name(child_name)
                 child_page_count = len(child_data["pages"])
 
